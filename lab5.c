@@ -19,6 +19,12 @@
 /* Global connection state.
  * You'll probably need more than just a sequence number... */
 int sequence_number;
+int expected_ack;
+int expected_seq; // for the receiver
+
+// The rtt variables
+int estimated_rtt;
+int dev_rtt;
 
 /* The following three helper functions make dealing with time values a bit
  * easier.  You probably don't need to modify them, but you can if you want. */
@@ -41,6 +47,11 @@ int current_msec() {
 int my_socket(int domain, int type, int protocol) {
     /* Initialize state. */
     sequence_number = 0;
+    expected_ack = 0;
+    expected_seq = 0;
+
+    estimated_rtt = 500;
+    dev_rtt = 0;
 
     return socket(domain, type, protocol);
 }
@@ -63,13 +74,43 @@ void my_send(int sock, void *buf, size_t len)
 
     /* Set the header fields as needed. */
     hdr->sequence_number = htonl(sequence_number);
+    hdr->ack_number = htonl(0);
+    hdr->flags = htonl(0);
 
     /* Copy the payload into our packet.  hdr + 1 is the address of the
      * first byte after the header. */
     memcpy(hdr+1,buf,len);
 
-    send(sock, packet, sizeof(struct lab5_hdr) + len, 0);
-    sequence_number++;
+    int send_time = current_msec();
+
+    int bytes_sent = send(sock, packet, sizeof(struct lab5_hdr) + len, 0);
+
+    fprint(stderr, "Sent packet seq=%d, len=%zu, bytes_sent=%d\n", sequence_number, len, bytes_sent);
+
+    char ack_packet[MAX_PACKET];
+    struct lab5_hdr  * ack_hdr = (struct lab5_hdr * ) ack_packet;
+
+    // Time out calculations
+    int timeout_ms = estimated_rtt + 4 * dev_rtt + 15;
+    struct timeval timeout;
+    msec_to_timeval(timeout_ms, &timeout);
+
+    // setup select for the timout
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(sock, & read_fds);
+
+
+    int retries = 0;
+    int max_retries = 5;
+
+    while (retries < max_retries) {
+
+        
+    }
+
+    // send(sock, packet, sizeof(struct lab5_hdr) + len, 0);
+    // sequence_number++;
 }
 
 int my_recv(int sock, void *buf, size_t length) {
