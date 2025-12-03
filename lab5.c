@@ -61,7 +61,7 @@ int my_connect(int socket,struct sockaddr_in *toaddr,int addrsize) {
 }
 
 int my_rtt(int socket) {
-    return 1000;
+    return estimated_rtt;
 }
 
 void my_send(int sock, void *buf, size_t len)
@@ -105,56 +105,69 @@ void my_send(int sock, void *buf, size_t len)
     int max_retries = 5;
 
     while (retries < max_retries) {
+
+        FD_ZERO(&read_fds);        
+        FD_SET(sock, &read_fds);
+
         msec_to_timeval(timeout_ms, &timeout);
+
         int select_result = select(sock + 1, &read_fds, NULL, NULL, &timeout);
 
         if (select_result > 0) {
-            struct sockaddr_in fromaddr;
-            socklen_t addrlen = sizeof(fromaddr);
-            int recv_count = recvfrom(sock, ack_packet, MAX_PACKET, 0, (struct sockaddr *) &fromaddr, &addrlen);
 
-            if (recv_ack >=sizeof(struct lab5_hdr)){
-                int recv_time = current_msec();
-                int sample_rtt = recv_time - send_time;
+        struct sockaddr_in fromaddr;
+        socklen_t addrlen = sizeof(fromaddr);
+        int recv_count = recvfrom(sock, ack_packet, MAX_PACKET, 0,
+            (struct sockaddr *) &fromaddr, &addrlen);
 
-                if(retries == 0){
-                    estimated_rtt = (7* estimated_rtt + sample_rtt) / 8;
-                    int diff = sample_rtt - estimated_rtt;
-                    if(diff < 0) diff= -diff;
-                    dev_rtt = (3 * dev_rtt + diff) /4;
+        if (recv_count >= sizeof(struct lab5_hdr)) {   
 
-                    fprintf(stderr , "RTT update: sample=%d, est=%d , dev=%d\n", 
-                    sample_rtt, estimated_rtt, dev_rtt);
+         int ackno = ntohl(ack_hdr->ack_number);   
+         if (ackno != sequence_number) {
+                fprintf(stderr, "Wrong ACK=%d (expected %d), ignoring\n",
+                 ackno, sequence_number);
+                    continue;
                 }
-                sequence_number++;
-                expected_ack++;
-                return;
+
+     int recv_time = current_msec();
+        int sample_rtt = recv_time - send_time;
+
+        if (retries == 0){
+             estimated_rtt = (7 * estimated_rtt + sample_rtt) / 8;
+            int diff = sample_rtt - estimated_rtt;
+            if(diff < 0) diff = -diff;
+            dev_rtt = (3 * dev_rtt + diff) / 4;
+            fprintf(stderr, "RTT update: sample=%d, est=%d, dev=%d\n",
+                sample_rtt, estimated_rtt, dev_rtt);
+                }
+
+            sequence_number++;
+            expected_ack++;
+            return;
             }
         }
-        
-    }
-    else if (select_result == 0){
-        fprintf(stderr, "Timeout on seq=%d , retrasnmitting(retry %d/%d)\n",
-        sequence_number, retries + 1 , max_retries);
+        else if (select_result == 0){       
 
-        send(sock, packet, sizeof(struct lab5_hdr) + len, 0);
+            fprintf(stderr,
+                    "Timeout on seq=%d, retransmitting (retry %d/%d)\n",
+                    sequence_number, retries + 1, max_retries);
 
-        timeout_ms *= 2;
-        retries++;
+            send(sock, packet, sizeof(struct lab5_hdr) + len, 0);
 
-        FD_ZERO(&read_fds);
-        FD_SET(sock, &read_fds);
-    }
-
-    else{
-        perror("select");
-        return;
+            timeout_ms *= 2;
+            retries++;
+        }
+        else {
+            perror("select");
+            return;
+        }
     }
 
-    // send(sock, packet, sizeof(struct lab5_hdr) + len, 0);
-    // sequence_number++;
-    fprintf(stderr, "ERROR: Failed to receive ACK after %d retries\n", max_retries);
+    fprintf(stderr, "ERROR: Failed to receive ACK after %d retries\n",
+            max_retries);
 }
+
+
 
 
 
@@ -212,9 +225,9 @@ int my_recv(int sock, void *buf, size_t length) {
         ack_hdr->flags = htonl(0);
 
         send(sock, ack_packet, sizeof(struct lab5_hdr), 0);
-        fprintf(stderr, "Sent ACK=%d/n", expected_seq);
+        fprintf(stderr, "Sent ACK=%d\n", expected_seq);
 
-        expected_seq;
+        expected_seq++;
 
         int payload_size = recv_count - sizeof(struct lab5_hdr);
         memcpy(buf , packet + sizeof(struct lab5_hdr), payload_size);
