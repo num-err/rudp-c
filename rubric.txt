@@ -1,0 +1,28 @@
+  Your protocol is a stop and wait protocol that delivers data reliably, even when link buffers are small (i.e., two packets).
+  1 / 1
+
+  Your protocol reliably delivers data despite packet losses.
+  0.5 / 2
+
+  Your protocol correctly estimates the round trip time of the path.
+  0.5 / 1
+
+  Your protocol cleanly terminates connections such that both ends agree that
+  the connection is closed.
+  1 / 1
+
+  No valgrind warnings.
+  1 / 1
+
+Total
+  4 / 6
+
+Comments:
+- Correct RTT estimation when there is no packet loss. Code incorrectly includes
+  retransmitted segements in the RTT estimation so the RTT estimate is too large
+  when there is packet loss (ex: 442 ms when actual is 20 ms)  [-0.5]
+
+- md5sum does not match for 1000lines when there is packet loss. Some binary
+  data in addition to lines before a packet loss ending up in the output file. Many
+  lines are repeated, not all the lines end up in the output and the transfer
+  is also extremely slow. Doesn't seem to handle packet loss correctly. [-1.5]
